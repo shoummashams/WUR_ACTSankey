@@ -1,0 +1,66 @@
+---
+title: "R Notebook"
+output: html_document
+keep_md: true
+---
+
+## Libraries
+```{r setup, warning=FALSE, message = FALSE}
+# install.packages("highcharter") # for Sankey chart
+# install.packages("htmlwidgets") # for exporting Sankey chart into HTML form
+# install.packages("webshot",dependencies = TRUE) # for exporting Sankey chart into image form
+
+library(highcharter)
+library(dplyr)
+library(htmlwidgets)
+library(webshot)
+```
+
+## Import inventory
+```{r}
+inventory <- read.csv("Inventory.csv")
+df <- subset(inventory, select = -c(ï...,Country, National)) # Remove unnecessary columns
+```
+
+Data cleanup for Sankey usage
+```{r}
+data <- df[-c(202:nrow(df)), ]
+data <- data.frame(append(data, c(Countries = "Countries"), after = 0))
+
+data$Present[data$Present == "N" |
+               data$Present == " "] <- "Not Present"
+data$Present[data$Present == "Y"] <- "Present"
+data$Implemented[data$Implemented == "N" |
+                   data$Implemented == "P"] <- "Planned"
+data$Implemented[data$Implemented == " " |
+                   data$Implemented == ""] <- "Unknown"
+data$Implemented[data$Implemented == "Y"] <- "Implemented"
+
+head(data)
+tail(data)
+```
+
+## Create Sankey chart
+```{r}
+plot <- hchart(data_to_sankey(data), "sankey", name = "Global Inventory")
+```
+
+## Customisation
+```{r}
+plot <- plot %>%
+  hc_title(text= "Global Inventory of National Adaptation Monitoring Systems") %>%
+  hc_subtitle(text= "Sankey Diagram")  %>%
+  hc_caption(text = "<b>Data is incomplete and this plot is for visualisation purposes only.<b>")%>%
+  hc_add_theme(hc_theme_hcrt()) %>%
+  hc_plotOptions(series = list(dataLabels = list( style = list(fontSize = "15px")))) %>%
+  hc_yAxis(labels = list(distance = 100))
+
+plot
+```
+
+## Export (currently broken)
+```{r}
+# htmlwidgets::saveWidget(widget = plot, file = "V:\\My Drive\\Wageningen\\Period 5 & 6 - WSG60812\\Research\\Sankey.html")
+
+# webshot::webshot(url = "V:\\My Drive\\Wageningen\\Period 5 & 6 - WSG60812\\Research\\Sankey.html", file = "V:\\My Drive\\Wageningen\\Period 5 & 6 - WSG60812\\Research\\Sankey.png", delay = 10)
+```
