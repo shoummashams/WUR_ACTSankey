@@ -4318,6 +4318,7 @@ pre code {
     <a href="https://shoummashams.github.io/full.html">View chart</a>
 </div>
 
+
 <div id="libraries" class="section level2">
 <h2>Libraries</h2>
 <pre class="r"><code># install.packages(&quot;highcharter&quot;) # for Sankey chart
@@ -4332,62 +4333,121 @@ library(webshot)</code></pre>
 <div id="import-inventory" class="section level2">
 <h2>Import inventory</h2>
 <pre class="r"><code>inventory &lt;- read.csv(&quot;Inventory.csv&quot;)
-df &lt;- subset(inventory, select = -c(ï...,Country, National)) # Remove unnecessary columns</code></pre>
+df &lt;- subset(inventory, select = c(&quot;Present&quot;, &quot;Implementation&quot;, &quot;Type&quot;)) # Remove unnecessary columns</code></pre>
 <p>Data cleanup for Sankey usage</p>
-<pre class="r"><code>data &lt;- df[-c(202:nrow(df)), ]
-data &lt;- data.frame(append(data, c(Countries = &quot;Countries&quot;), after = 0))
+<pre class="r"><code>#data &lt;- df[-c(197:nrow(df)), ]
+data &lt;- data.frame(append(df, c(Countries = &quot;Countries&quot;), after = 0)) # Make first column &quot;Countries&quot; to group all together initial starting point on chart
 
-data$Present[data$Present == &quot;N&quot; |
-               data$Present == &quot; &quot;] &lt;- &quot;Not Present&quot;
-data$Present[data$Present == &quot;Y&quot;] &lt;- &quot;Present&quot;
-data$Implemented[data$Implemented == &quot;N&quot; |
-                   data$Implemented == &quot;P&quot;] &lt;- &quot;Planned&quot;
-data$Implemented[data$Implemented == &quot; &quot; |
-                   data$Implemented == &quot;&quot;] &lt;- &quot;Unknown&quot;
-data$Implemented[data$Implemented == &quot;Y&quot;] &lt;- &quot;Implemented&quot;
+# Change Yes in Present to &quot;Present&quot; for visualisation
+
+data &lt;- subset(data, Present == &quot;Yes&quot;)
+data$Present[data$Present == &quot;Yes&quot;] &lt;- &quot;Present&quot;
+
+# Hide data for countries that have no data in Present to prevent empty categories
+for (n in 1:nrow(data)) {
+  if (data[n,&quot;Present&quot;] == &quot;No data&quot;)
+    data[n,&quot;Implementation&quot;] = NA
+}
+
+# Clean up all the Types
+data$Type[data$Type == &quot;1,3&quot;] &lt;- 2
+data$Type[data$Type == &quot;&quot;] &lt;- NA
+data$Type[data$Type == &quot;No data&quot;] &lt;- &quot;Unknown Type&quot;
+data$Type[data$Type == 1] &lt;- &quot;Type 1&quot;
+data$Type[data$Type == 2] &lt;- &quot;Type 2&quot;
+data$Type[data$Type == 3] &lt;- &quot;Type 3&quot;
+
+# If Implementation is &quot;No data&quot; but there is a Type present, convert Type to &quot;No data&quot; since otherwise it creates a loop
+#for (n in 1:nrow(data)) {
+ # if (data[n,&quot;Implementation&quot;] == &quot;No data&quot; &amp;&amp; data[n,&quot;Type&quot;] != &quot;No data&quot;)
+ #   data[n,&quot;Type&quot;] = &quot;Unknown Type&quot;
+#}
+
+# Change No data in Implementation to prevent looping in chart
+data$Implementation[data$Implementation == &quot;No data&quot; | data$Implementation == &quot;&quot;] &lt;- &quot;Unknown&quot;
 
 head(data)</code></pre>
-<pre><code>##   Countries     Present Implemented Type
-## 1 Countries Not Present     Unknown   NA
-## 2 Countries Not Present     Unknown   NA
-## 3 Countries Not Present     Unknown   NA
-## 4 Countries Not Present     Unknown   NA
-## 5 Countries     Present Implemented    3
-## 6 Countries Not Present     Unknown   NA</code></pre>
+<pre><code>##    Countries Present Implementation   Type
+## 10 Countries Present    Implemented Type 3
+## 17 Countries Present    Implemented Type 3
+## 24 Countries Present    Implemented Type 3
+## 26 Countries Present    Implemented Type 3
+## 27 Countries Present    Implemented Type 1
+## 30 Countries Present    Implemented Type 3</code></pre>
 <pre class="r"><code>tail(data)</code></pre>
-<pre><code>##     Countries     Present Implemented Type
-## 196 Countries Not Present     Unknown   NA
-## 197 Countries Not Present     Unknown   NA
-## 198 Countries Not Present     Unknown   NA
-## 199 Countries Not Present     Unknown   NA
-## 200 Countries Not Present     Unknown   NA
-## 201 Countries Not Present     Unknown   NA</code></pre>
+<pre><code>##     Countries Present Implementation         Type
+## 169 Countries Present        Planned Unknown Type
+## 177 Countries Present        Planned       Type 1
+## 178 Countries Present    Implemented       Type 3
+## 187 Countries Present    Implemented       Type 2
+## 189 Countries Present        Planned       Type 3
+## 195 Countries Present    Implemented       Type 2</code></pre>
+<p>Labels</p>
+<pre class="r"><code># Add percentages to all labels
+data1 &lt;- data %&gt;%
+      group_by(Present) %&gt;%
+      tally()%&gt;%
+      mutate(perc = n/sum(n))%&gt;%
+      mutate(PresentNew = paste0(Present, &#39; (&#39;,n,&#39;)&#39;))%&gt;%
+      select(-n, - perc)
+
+data_w_stats &lt;- merge(data, data1, by = &quot;Present&quot;)
+
+data2 &lt;- data %&gt;%
+      group_by(Implementation) %&gt;%
+      tally()%&gt;%
+      mutate(perc = n/sum(n))%&gt;%
+      mutate(ImplNew = paste0(Implementation, &#39; (&#39;,round(perc* 100,1) , &#39;%)&#39;))%&gt;%
+      select(-n, - perc)
+
+data_w_stats &lt;- merge(data_w_stats, data2, by = &quot;Implementation&quot;)
+
+data3 &lt;- data %&gt;%
+      group_by(Type) %&gt;%
+      tally()%&gt;%
+      mutate(perc = n/sum(n))%&gt;%
+      mutate(TypeNew = paste0(Type, &#39; (&#39;,round(perc* 100,1), &#39;%)&#39;))%&gt;%
+      select(-n, - perc)
+
+data_w_stats &lt;- merge(data_w_stats, data3, by = &quot;Type&quot;)
+
+# Create final table for Sankey chart (option 1 is without countries)
+dataSankey &lt;- data_w_stats %&gt;%
+  select(PresentNew, ImplNew, TypeNew)
+
+#dataSankey &lt;- data_w_stats %&gt;%
+#  select(Countries, PresentNew, ImplNew, TypeNew) %&gt;%
+#  mutate(Countries = paste0(Countries, &#39; (&#39;,nrow(data),&#39;)&#39;))
+
+# Hide unnecessary information
+dataSankey$TypeNew[dataSankey$TypeNew == &quot;NA (78.6%)&quot;] = NA
+dataSankey$ImplNew[dataSankey$ImplNew == &quot;NA (78.6%)&quot;] = NA</code></pre>
 </div>
 <div id="create-sankey-chart" class="section level2">
 <h2>Create Sankey chart</h2>
-<pre class="r"><code>plot &lt;- hchart(data_to_sankey(data), &quot;sankey&quot;, name = &quot;Global Inventory&quot;)</code></pre>
-<pre><code>## Warning in data_to_sankey(data): numeric variables were treated with cut()
-## function</code></pre>
-</div>
-<div id="customisation" class="section level2">
-<h2>Customisation</h2>
-<pre class="r"><code>plot &lt;- plot %&gt;%
+<pre class="r"><code>plot &lt;- hchart(data_to_sankey(dataSankey), &quot;sankey&quot;, name = &quot;Global Inventory&quot;) 
+
+## Customisation
+
+sankey_plot &lt;- plot %&gt;%
   hc_title(text= &quot;Global Inventory of National Adaptation Monitoring Systems&quot;) %&gt;%
   hc_subtitle(text= &quot;Sankey Diagram&quot;)  %&gt;%
   hc_caption(text = &quot;&lt;b&gt;Data is incomplete and this plot is for visualisation purposes only.&lt;b&gt;&quot;)%&gt;%
-  hc_add_theme(hc_theme_hcrt()) %&gt;%
-  hc_plotOptions(series = list(dataLabels = list( style = list(fontSize = &quot;15px&quot;)))) %&gt;%
-  hc_yAxis(labels = list(distance = 100))
+  hc_add_theme(hc_theme_elementary()) %&gt;%
+  hc_plotOptions(series = list(enabled = TRUE,
+                               dataLabels = list(style = list(fontSize = &quot;15px&quot;)),
+                               connectorAllowed = TRUE)) %&gt;%
+  hc_yAxis(labels = list(distance = 100)) %&gt;%
+  hc_exporting(enabled = TRUE,
+               filename = &quot;sankey&quot;)
 
-plot</code></pre>
-<div id="htmlwidget-90978e49c3272625c196" style="width:672px;height:480px;" class="highchart html-widget"></div>
-<script type="application/json" data-for="htmlwidget-90978e49c3272625c196">{"x":{"hc_opts":{"chart":{"reflow":true},"title":{"text":"Global Inventory of National Adaptation Monitoring Systems"},"yAxis":{"title":{"text":[]},"labels":{"distance":100}},"credits":{"enabled":false},"exporting":{"enabled":false},"boost":{"enabled":false},"plotOptions":{"series":{"label":{"enabled":false},"turboThreshold":0,"showInLegend":false,"dataLabels":{"style":{"fontSize":"15px"}}},"treemap":{"layoutAlgorithm":"squarified"},"scatter":{"marker":{"symbol":"circle"}}},"series":[{"group":"group","data":[{"from":"Countries","to":"Not Present","weight":138,"id":"CountriesNot Present"},{"from":"Countries","to":"Present","weight":63,"id":"CountriesPresent"},{"from":"Not Present","to":"Unknown","weight":138,"id":"Not PresentUnknown"},{"from":"Present","to":"Implemented","weight":25,"id":"PresentImplemented"},{"from":"Present","to":"Planned","weight":36,"id":"PresentPlanned"},{"from":"Present","to":"Unknown","weight":2,"id":"PresentUnknown"},{"from":"Implemented","to":"1","weight":2,"id":"Implemented1"},{"from":"Implemented","to":"2","weight":5,"id":"Implemented2"},{"from":"Implemented","to":"3","weight":18,"id":"Implemented3"},{"from":"Planned","to":"1","weight":10,"id":"Planned1"},{"from":"Planned","to":"2","weight":13,"id":"Planned2"},{"from":"Planned","to":"3","weight":13,"id":"Planned3"},{"from":"Unknown","to":null,"weight":140,"id":"UnknownNA"}],"type":"sankey","name":"Global Inventory"}],"xAxis":{"type":null,"title":{"text":[]},"categories":null},"subtitle":{"text":"Sankey Diagram"},"caption":{"text":"<b>Data is incomplete and this plot is for visualisation purposes only.<b>"}},"theme":{"colors":["#47475c","#61BC7B","#508CC8","#F49952","#9C9EDB","#6699a1"],"chart":{"style":{"fontFamily":"IBM Plex Sans","color":"#666666"}},"title":{"align":"left","style":{"fontFamily":"Alegreya Sans SC","fontSize":"24px"}},"subtitle":{"align":"left","style":{"fontFamily":"Alegreya Sans","fontSize":"16px"}},"caption":{"style":{"fontFamily":"Alegreya Sans","fontSize":"14px"}},"credits":{"style":{"fontFamily":"Roboto","fontSize":"10px"}},"legend":{"align":"right","verticalAlign":"bottom","itemStyle":{"fontWeight":"normal","color":"#A2A39C"}},"xAxis":{"gridLineWidth":1,"gridLineColor":"#F3F3F3","lineColor":"#F3F3F3","minorGridLineColor":"#F3F3F3","tickColor":"#F3F3F3","tickWidth":1},"yAxis":{"gridLineColor":"#F3F3F3","lineColor":"#F3F3F3","minorGridLineColor":"#F3F3F3","tickColor":"#F3F3F3","tickWidth":1},"plotOptions":{"line":{"marker":{"enabled":false}},"spline":{"marker":{"enabled":false}},"area":{"marker":{"enabled":false}},"areaspline":{"marker":{"enabled":false}},"arearange":{"marker":{"enabled":false}},"bubble":{"maxSize":"10%"}}},"conf_opts":{"global":{"Date":null,"VMLRadialGradientURL":"http =//code.highcharts.com/list(version)/gfx/vml-radial-gradient.png","canvasToolsURL":"http =//code.highcharts.com/list(version)/modules/canvas-tools.js","getTimezoneOffset":null,"timezoneOffset":0,"useUTC":true},"lang":{"contextButtonTitle":"Chart context menu","decimalPoint":".","downloadCSV":"Download CSV","downloadJPEG":"Download JPEG image","downloadPDF":"Download PDF document","downloadPNG":"Download PNG image","downloadSVG":"Download SVG vector image","downloadXLS":"Download XLS","drillUpText":"◁ Back to {series.name}","exitFullscreen":"Exit from full screen","exportData":{"annotationHeader":"Annotations","categoryDatetimeHeader":"DateTime","categoryHeader":"Category"},"hideData":"Hide data table","invalidDate":null,"loading":"Loading...","months":["January","February","March","April","May","June","July","August","September","October","November","December"],"noData":"No data to display","numericSymbolMagnitude":1000,"numericSymbols":["k","M","G","T","P","E"],"printChart":"Print chart","resetZoom":"Reset zoom","resetZoomTitle":"Reset zoom level 1:1","shortMonths":["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],"shortWeekdays":["Sat","Sun","Mon","Tue","Wed","Thu","Fri"],"thousandsSep":" ","viewData":"View data table","viewFullscreen":"View in full screen","weekdays":["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]}},"type":"chart","fonts":["IBM+Plex+Sans","Alegreya+Sans+SC","Alegreya+Sans","Roboto"],"debug":false},"evals":[],"jsHooks":[]}</script>
+sankey_plot</code></pre>
+<div id="htmlwidget-94541a83d3dee143940e" style="width:672px;height:480px;" class="highchart html-widget"></div>
+<script type="application/json" data-for="htmlwidget-94541a83d3dee143940e">{"x":{"hc_opts":{"chart":{"reflow":true},"title":{"text":"Global Inventory of National Adaptation Monitoring Systems"},"yAxis":{"title":{"text":[]},"labels":{"distance":100}},"credits":{"enabled":false},"exporting":{"enabled":true,"filename":"sankey"},"boost":{"enabled":false},"plotOptions":{"series":{"label":{"enabled":false},"turboThreshold":0,"showInLegend":false,"enabled":true,"dataLabels":{"style":{"fontSize":"15px"}},"connectorAllowed":true},"treemap":{"layoutAlgorithm":"squarified"},"scatter":{"marker":{"symbol":"circle"}}},"series":[{"group":"group","data":[{"from":"Present (42)","to":"Implemented (59.5%)","weight":25,"id":"Present (42)Implemented (59.5%)"},{"from":"Present (42)","to":"Planned (35.7%)","weight":15,"id":"Present (42)Planned (35.7%)"},{"from":"Present (42)","to":"Unknown (4.8%)","weight":2,"id":"Present (42)Unknown (4.8%)"},{"from":"Implemented (59.5%)","to":"Type 1 (11.9%)","weight":3,"id":"Implemented (59.5%)Type 1 (11.9%)"},{"from":"Implemented (59.5%)","to":"Type 2 (19%)","weight":7,"id":"Implemented (59.5%)Type 2 (19%)"},{"from":"Implemented (59.5%)","to":"Type 3 (57.1%)","weight":15,"id":"Implemented (59.5%)Type 3 (57.1%)"},{"from":"Planned (35.7%)","to":"Type 1 (11.9%)","weight":2,"id":"Planned (35.7%)Type 1 (11.9%)"},{"from":"Planned (35.7%)","to":"Type 2 (19%)","weight":1,"id":"Planned (35.7%)Type 2 (19%)"},{"from":"Planned (35.7%)","to":"Type 3 (57.1%)","weight":8,"id":"Planned (35.7%)Type 3 (57.1%)"},{"from":"Planned (35.7%)","to":"Unknown Type (11.9%)","weight":4,"id":"Planned (35.7%)Unknown Type (11.9%)"},{"from":"Unknown (4.8%)","to":"Type 3 (57.1%)","weight":1,"id":"Unknown (4.8%)Type 3 (57.1%)"},{"from":"Unknown (4.8%)","to":"Unknown Type (11.9%)","weight":1,"id":"Unknown (4.8%)Unknown Type (11.9%)"}],"type":"sankey","name":"Global Inventory"}],"xAxis":{"type":null,"title":{"text":[]},"categories":null},"subtitle":{"text":"Sankey Diagram"},"caption":{"text":"<b>Data is incomplete and this plot is for visualisation purposes only.<b>"}},"theme":{"colors":["#41B5E9","#FA8832","#34393C","#E46151"],"chart":{"style":{"color":"#333","fontFamily":"Open Sans"}},"title":{"style":{"fontFamily":"Raleway","fontWeight":"100"}},"subtitle":{"style":{"fontFamily":"Raleway","fontWeight":"100"}},"legend":{"align":"right","verticalAlign":"bottom"},"xAxis":{"gridLineWidth":1,"gridLineColor":"#F3F3F3","lineColor":"#F3F3F3","minorGridLineColor":"#F3F3F3","tickColor":"#F3F3F3","tickWidth":1},"yAxis":{"gridLineColor":"#F3F3F3","lineColor":"#F3F3F3","minorGridLineColor":"#F3F3F3","tickColor":"#F3F3F3","tickWidth":1}},"conf_opts":{"global":{"Date":null,"VMLRadialGradientURL":"http =//code.highcharts.com/list(version)/gfx/vml-radial-gradient.png","canvasToolsURL":"http =//code.highcharts.com/list(version)/modules/canvas-tools.js","getTimezoneOffset":null,"timezoneOffset":0,"useUTC":true},"lang":{"contextButtonTitle":"Chart context menu","decimalPoint":".","downloadCSV":"Download CSV","downloadJPEG":"Download JPEG image","downloadPDF":"Download PDF document","downloadPNG":"Download PNG image","downloadSVG":"Download SVG vector image","downloadXLS":"Download XLS","drillUpText":"◁ Back to {series.name}","exitFullscreen":"Exit from full screen","exportData":{"annotationHeader":"Annotations","categoryDatetimeHeader":"DateTime","categoryHeader":"Category"},"hideData":"Hide data table","invalidDate":null,"loading":"Loading...","months":["January","February","March","April","May","June","July","August","September","October","November","December"],"noData":"No data to display","numericSymbolMagnitude":1000,"numericSymbols":["k","M","G","T","P","E"],"printChart":"Print chart","resetZoom":"Reset zoom","resetZoomTitle":"Reset zoom level 1:1","shortMonths":["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],"shortWeekdays":["Sat","Sun","Mon","Tue","Wed","Thu","Fri"],"thousandsSep":" ","viewData":"View data table","viewFullscreen":"View in full screen","weekdays":["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]}},"type":"chart","fonts":["Open+Sans","Raleway"],"debug":false},"evals":[],"jsHooks":[]}</script>
 </div>
-<div id="export-currently-broken" class="section level2">
-<h2>Export (currently broken)</h2>
-<pre class="r"><code># htmlwidgets::saveWidget(widget = plot, file = &quot;V:\\My Drive\\Wageningen\\Period 5 &amp; 6 - WSG60812\\Research\\Sankey.html&quot;)
-
-# webshot::webshot(url = &quot;V:\\My Drive\\Wageningen\\Period 5 &amp; 6 - WSG60812\\Research\\Sankey.html&quot;, file = &quot;V:\\My Drive\\Wageningen\\Period 5 &amp; 6 - WSG60812\\Research\\Sankey.png&quot;, delay = 10)</code></pre>
+<div id="export" class="section level2">
+<h2>Export</h2>
+<pre class="r"><code>htmlwidgets::saveWidget(widget = sankey_plot, file = &quot;Sankey.html&quot;)</code></pre>
 </div>
 
 

@@ -19,48 +19,111 @@ library(webshot)
 ## Import inventory
 ```{r}
 inventory <- read.csv("Inventory.csv")
-df <- subset(inventory, select = -c(ï...,Country, National)) # Remove unnecessary columns
+df <- subset(inventory, select = c("Present", "Implementation", "Type")) # Remove unnecessary columns
 ```
 
 Data cleanup for Sankey usage
 ```{r}
-data <- df[-c(202:nrow(df)), ]
-data <- data.frame(append(data, c(Countries = "Countries"), after = 0))
+#data <- df[-c(197:nrow(df)), ]
+data <- data.frame(append(df, c(Countries = "Countries"), after = 0)) # Make first column "Countries" to group all together initial starting point on chart
 
-data$Present[data$Present == "N" |
-               data$Present == " "] <- "Not Present"
-data$Present[data$Present == "Y"] <- "Present"
-data$Implemented[data$Implemented == "N" |
-                   data$Implemented == "P"] <- "Planned"
-data$Implemented[data$Implemented == " " |
-                   data$Implemented == ""] <- "Unknown"
-data$Implemented[data$Implemented == "Y"] <- "Implemented"
+# Change Yes in Present to "Present" for visualisation
+
+data <- subset(data, Present == "Yes")
+data$Present[data$Present == "Yes"] <- "Present"
+
+# Hide data for countries that have no data in Present to prevent empty categories
+for (n in 1:nrow(data)) {
+  if (data[n,"Present"] == "No data")
+    data[n,"Implementation"] = NA
+}
+
+# Clean up all the Types
+data$Type[data$Type == "1,3"] <- 2
+data$Type[data$Type == ""] <- NA
+data$Type[data$Type == "No data"] <- "Unknown Type"
+data$Type[data$Type == 1] <- "Type 1"
+data$Type[data$Type == 2] <- "Type 2"
+data$Type[data$Type == 3] <- "Type 3"
+
+# If Implementation is "No data" but there is a Type present, convert Type to "No data" since otherwise it creates a loop
+#for (n in 1:nrow(data)) {
+ # if (data[n,"Implementation"] == "No data" && data[n,"Type"] != "No data")
+ #   data[n,"Type"] = "Unknown Type"
+#}
+
+# Change No data in Implementation to prevent looping in chart
+data$Implementation[data$Implementation == "No data" | data$Implementation == ""] <- "Unknown"
 
 head(data)
 tail(data)
 ```
 
-## Create Sankey chart
+Labels
 ```{r}
-plot <- hchart(data_to_sankey(data), "sankey", name = "Global Inventory")
+# Add percentages to all labels
+data1 <- data %>%
+      group_by(Present) %>%
+      tally()%>%
+      mutate(perc = n/sum(n))%>%
+      mutate(PresentNew = paste0(Present, ' (',n,')'))%>%
+      select(-n, - perc)
+
+data_w_stats <- merge(data, data1, by = "Present")
+
+data2 <- data %>%
+      group_by(Implementation) %>%
+      tally()%>%
+      mutate(perc = n/sum(n))%>%
+      mutate(ImplNew = paste0(Implementation, ' (',round(perc* 100,1) , '%)'))%>%
+      select(-n, - perc)
+
+data_w_stats <- merge(data_w_stats, data2, by = "Implementation")
+
+data3 <- data %>%
+      group_by(Type) %>%
+      tally()%>%
+      mutate(perc = n/sum(n))%>%
+      mutate(TypeNew = paste0(Type, ' (',round(perc* 100,1), '%)'))%>%
+      select(-n, - perc)
+
+data_w_stats <- merge(data_w_stats, data3, by = "Type")
+
+# Create final table for Sankey chart (option 1 is without countries)
+dataSankey <- data_w_stats %>%
+  select(PresentNew, ImplNew, TypeNew)
+
+#dataSankey <- data_w_stats %>%
+#  select(Countries, PresentNew, ImplNew, TypeNew) %>%
+#  mutate(Countries = paste0(Countries, ' (',nrow(data),')'))
+
+# Hide unnecessary information
+dataSankey$TypeNew[dataSankey$TypeNew == "NA (78.6%)"] = NA
+dataSankey$ImplNew[dataSankey$ImplNew == "NA (78.6%)"] = NA
 ```
 
-## Customisation
+## Create Sankey chart
 ```{r}
-plot <- plot %>%
+plot <- hchart(data_to_sankey(dataSankey), "sankey", name = "Global Inventory") 
+
+## Customisation
+
+sankey_plot <- plot %>%
   hc_title(text= "Global Inventory of National Adaptation Monitoring Systems") %>%
   hc_subtitle(text= "Sankey Diagram")  %>%
   hc_caption(text = "<b>Data is incomplete and this plot is for visualisation purposes only.<b>")%>%
-  hc_add_theme(hc_theme_hcrt()) %>%
-  hc_plotOptions(series = list(dataLabels = list( style = list(fontSize = "15px")))) %>%
-  hc_yAxis(labels = list(distance = 100))
+  hc_add_theme(hc_theme_elementary()) %>%
+  hc_plotOptions(series = list(enabled = TRUE,
+                               dataLabels = list(style = list(fontSize = "15px")),
+                               connectorAllowed = TRUE)) %>%
+  hc_yAxis(labels = list(distance = 100)) %>%
+  hc_exporting(enabled = TRUE,
+               filename = "sankey")
 
-plot
+sankey_plot
 ```
 
-## Export (currently broken)
+## Export
 ```{r}
-# htmlwidgets::saveWidget(widget = plot, file = "V:\\My Drive\\Wageningen\\Period 5 & 6 - WSG60812\\Research\\Sankey.html")
-
-# webshot::webshot(url = "V:\\My Drive\\Wageningen\\Period 5 & 6 - WSG60812\\Research\\Sankey.html", file = "V:\\My Drive\\Wageningen\\Period 5 & 6 - WSG60812\\Research\\Sankey.png", delay = 10)
+htmlwidgets::saveWidget(widget = sankey_plot, file = "Sankey.html")
 ```
