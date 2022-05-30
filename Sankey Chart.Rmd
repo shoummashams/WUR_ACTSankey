@@ -1,8 +1,16 @@
 ---
-title: "R Notebook"
-output: html_document
+title: "Global Inventory of Adaptation Monitoring Systems for CAS"
+output:
+  html_document:
+    theme: united
+    highlight: tango
+    css: styles.css
 keep_md: true
 ---
+
+#### [View chart](https://shoummashams.github.io/full.html) {#link}
+
+#### [Colour-blind friendly version of the chart](https://shoummashams.github.io/cb.html) {#link}
 
 ## Libraries
 ```{r setup, warning=FALSE, message = FALSE}
@@ -19,12 +27,13 @@ library(webshot)
 ## Import inventory
 ```{r}
 inventory <- read.csv("Inventory.csv")
-df <- subset(inventory, select = c("Present", "Implementation", "Type")) # Remove unnecessary columns
+names(inventory) <- inventory[1, ] 
+df <- inventory[c(2:nrow(inventory)), ] # Remove top row
+df <- subset(df, select = c("Present", "Implementation", "Type")) # Remove unnecessary columns
 ```
 
 Data cleanup for Sankey usage
 ```{r}
-#data <- df[-c(197:nrow(df)), ]
 data <- data.frame(append(df, c(Countries = "Countries"), after = 0)) # Make first column "Countries" to group all together initial starting point on chart
 
 # Change Yes in Present to "Present" for visualisation
@@ -39,7 +48,7 @@ for (n in 1:nrow(data)) {
 }
 
 # Clean up all the Types
-data$Type[data$Type == "1,3"] <- 2
+data$Type[data$Type == "1,3"] <- "Type 1 & 3"
 data$Type[data$Type == ""] <- NA
 data$Type[data$Type == "No data"] <- "Unknown Type"
 data$Type[data$Type == 1] <- "Type 1"
@@ -66,7 +75,7 @@ data1 <- data %>%
       group_by(Present) %>%
       tally()%>%
       mutate(perc = n/sum(n))%>%
-      mutate(PresentNew = paste0(Present, ' (',n,')'))%>%
+      mutate(PresentNew = paste0(Present, ' (',n,' Countries)'))%>%
       select(-n, - perc)
 
 data_w_stats <- merge(data, data1, by = "Present")
@@ -83,7 +92,7 @@ data_w_stats <- merge(data_w_stats, data2, by = "Implementation")
 data3 <- data %>%
       group_by(Type) %>%
       tally()%>%
-      mutate(perc = n/sum(n))%>%
+      mutate(perc = n/(sum(n)-2))%>% # -2 for the two countries with no implementation info
       mutate(TypeNew = paste0(Type, ' (',round(perc* 100,1), '%)'))%>%
       select(-n, - perc)
 
@@ -111,11 +120,12 @@ plot <- hchart(data_to_sankey(dataSankey), "sankey", name = "Global Inventory")
 sankey_plot <- plot %>%
   hc_title(text= "Global Inventory of National Adaptation Monitoring Systems") %>%
   hc_subtitle(text= "Sankey Diagram")  %>%
-  hc_caption(text = "<b>Data is incomplete and this plot is for visualisation purposes only.<b>")%>%
+  hc_caption(text = "<b>This plot is for visualisation purposes only. Data is gathered from the inventory.<b>")%>%
   hc_add_theme(hc_theme_elementary()) %>%
   hc_plotOptions(series = list(enabled = TRUE,
-                               dataLabels = list(style = list(fontSize = "15px")),
-                               connectorAllowed = TRUE)) %>%
+                               dataLabels = list(style = list(fontSize = "15px",
+                                                              color = "black",
+                                                              connectorAllowed = TRUE)))) %>%
   hc_yAxis(labels = list(distance = 100)) %>%
   hc_exporting(enabled = TRUE,
                filename = "sankey")
@@ -123,7 +133,37 @@ sankey_plot <- plot %>%
 sankey_plot
 ```
 
+## Colour-blind friendly version
+```{r}
+cb_plot <- highchart() %>%
+  hc_add_series(data = data_to_sankey(dataSankey), "sankey", name = "Global Inventory",
+                hcaes(from = from, to = to, weight = weight),
+                nodes = list(list(id = "Present (41 Countries)", color = "#56B4E9"), #sky blue
+                             list(id = "Implemented (58.5%)", color = "#D55E00"), #orange
+                             list(id = "Planned (36.6%)", color = "#CC79A7"), #pink
+                             list(id = "Unknown (4.9%)", color = "black"),
+                             list(id = "Type 1 & 3 (5.1%)", color = "#009E73"), #turquoise
+                             list(id = "Type 1 (12.8%)", color = "#0072B2"), #blue
+                             list(id = "Type 2 (12.8%)", color = "#F0E442"), #yellow-green
+                             list(id = "Type 3 (61.5%)", color = "#56B4E9"),
+                             list(id = "Unknown Type (12.8%)", color = "#E69F00") #pale orange
+                             )) %>%
+  hc_title(text= "Global Inventory of National Adaptation Monitoring Systems") %>%
+  hc_subtitle(text= "Sankey Diagram")  %>%
+  hc_caption(text = "<b>This plot is for visualisation purposes only. Data is gathered from the inventory.<b>")%>%
+  hc_add_theme(hc_theme_elementary()) %>%
+  hc_plotOptions(series = list(enabled = TRUE,
+                               dataLabels = list(style = list(fontSize = "15px",
+                                                              color = "black",
+                                                              connectorAllowed = TRUE)))) %>%
+  hc_yAxis(labels = list(distance = 100)) %>%
+  hc_exporting(enabled = TRUE,
+               filename = "sankey")
+
+cb_plot
+```
+
 ## Export
 ```{r}
-htmlwidgets::saveWidget(widget = sankey_plot, file = "Sankey.html")
+htmlwidgets::saveWidget(widget = cb_plot, file = "Sankey_cb.html")
 ```
